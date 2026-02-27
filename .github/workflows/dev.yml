@@ -7,7 +7,7 @@ on:
       
 jobs:
   build:
-    runs-on: [self-hosted,update-joni-instance-vm]
+    runs-on: [self-hosted,update-joni-instance-vm-1]
 
     env:
       PM2_PROCESS_NAME: Joni-update-instance-dev
