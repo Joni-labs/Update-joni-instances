@@ -39,13 +39,19 @@ log "━━━━━━━━━━━━━━━━━━━━━━━━━
 
 # Step 1: Stop containers
 STEP_START=$SECONDS
-log "[1/8] Stopping running JONI containers..."
+log "[1/9] Stopping running JONI containers..."
 ssh "${SSH_OPTS[@]}" "$SSH_HOST" "cd ~/JONI 2>/dev/null && docker compose down || true"
-log "[1/8] Containers stopped ($(( SECONDS - STEP_START ))s)"
+log "[1/9] Containers stopped ($(( SECONDS - STEP_START ))s)"
 
-# Step 2: Backup .env.joni and ~/.joni
+# Step 2: Prune Docker cache
 STEP_START=$SECONDS
-log "[2/8] Backing up .env.joni and ~/.joni..."
+log "[2/9] Pruning Docker system (images, containers, build cache)..."
+ssh "${SSH_OPTS[@]}" "$SSH_HOST" "docker system prune -a -f"
+log "[2/9] Docker prune complete ($(( SECONDS - STEP_START ))s)"
+
+# Step 3: Backup .env.joni and ~/.joni
+STEP_START=$SECONDS
+log "[3/9] Backing up .env.joni and ~/.joni..."
 ssh "${SSH_OPTS[@]}" "$SSH_HOST" "
   if [[ -f ~/JONI/.env.joni ]]; then
     cp ~/JONI/.env.joni /tmp/.env.joni.bak
@@ -60,23 +66,23 @@ ssh "${SSH_OPTS[@]}" "$SSH_HOST" "
     echo 'BACKUP: no ~/.joni found, skipping'
   fi
 "
-log "[2/8] Backup complete ($(( SECONDS - STEP_START ))s)"
+log "[3/9] Backup complete ($(( SECONDS - STEP_START ))s)"
 
-# Step 3: Remove old source
+# Step 4: Remove old source
 STEP_START=$SECONDS
-log "[3/8] Removing old JONI source..."
+log "[4/9] Removing old JONI source..."
 ssh "${SSH_OPTS[@]}" "$SSH_HOST" "rm -rf ~/JONI && echo 'Removed ~/JONI'"
-log "[3/8] Old source removed ($(( SECONDS - STEP_START ))s)"
+log "[4/9] Old source removed ($(( SECONDS - STEP_START ))s)"
 
-# Step 4: Clone fresh from branch
+# Step 5: Clone fresh from branch
 STEP_START=$SECONDS
-log "[4/8] Cloning from branch ${BRANCH}..."
+log "[5/9] Cloning from branch ${BRANCH}..."
 ssh "${SSH_OPTS[@]}" "$SSH_HOST" "GIT_TERMINAL_PROMPT=0 git clone -b ${BRANCH} ${CLONE_URL} ~/JONI && cd ~/JONI && echo 'Cloned. On branch:' && git branch --show-current && echo 'Commit:' && git log --oneline -1"
-log "[4/8] Clone complete ($(( SECONDS - STEP_START ))s)"
+log "[5/9] Clone complete ($(( SECONDS - STEP_START ))s)"
 
-# Step 5: Restore .env.joni
+# Step 6: Restore .env.joni
 STEP_START=$SECONDS
-log "[5/8] Restoring .env.joni..."
+log "[6/9] Restoring .env.joni..."
 ssh "${SSH_OPTS[@]}" "$SSH_HOST" "
   if [[ -f /tmp/.env.joni.bak ]]; then
     cp /tmp/.env.joni.bak ~/JONI/.env.joni
@@ -85,11 +91,16 @@ ssh "${SSH_OPTS[@]}" "$SSH_HOST" "
     echo 'RESTORE: no .env.joni backup found'
   fi
 "
-log "[5/8] .env.joni restore done ($(( SECONDS - STEP_START ))s)"
+log "[6/9] .env.joni restore done ($(( SECONDS - STEP_START ))s)"
 
-# Step 6: Restore ~/.joni (wallet, memory, sessions, config)
+# Step 6b: Inject any missing env vars into .env.joni
+ssh "${SSH_OPTS[@]}" "$SSH_HOST" "
+  grep -q '^ALCHEMY_API_KEY=' ~/JONI/.env.joni 2>/dev/null || echo 'ALCHEMY_API_KEY=_b50-oCapOtUkL7Auw6Re' >> ~/JONI/.env.joni
+"
+
+# Step 7: Restore ~/.joni (wallet, memory, sessions, config)
 STEP_START=$SECONDS
-log "[6/8] Restoring ~/.joni (wallet, memory, sessions, config)..."
+log "[7/9] Restoring ~/.joni (wallet, memory, sessions, config)..."
 ssh "${SSH_OPTS[@]}" "$SSH_HOST" "
   if [[ -d /tmp/.joni-backup ]]; then
     rm -rf ~/.joni
@@ -101,19 +112,19 @@ ssh "${SSH_OPTS[@]}" "$SSH_HOST" "
     echo 'RESTORE: no ~/.joni backup found'
   fi
 "
-log "[6/8] ~/.joni restore done ($(( SECONDS - STEP_START ))s)"
+log "[7/9] ~/.joni restore done ($(( SECONDS - STEP_START ))s)"
 
-# Step 7: Rebuild & start
+# Step 8: Rebuild & start
 STEP_START=$SECONDS
-log "[7/8] Rebuilding & starting JONI (docker-setup.sh)..."
+log "[8/9] Rebuilding & starting JONI (docker-setup.sh)..."
 ssh "${SSH_OPTS[@]}" "$SSH_HOST" "cd ~/JONI && chmod +x docker-setup.sh && ./docker-setup.sh"
-log "[7/8] Docker rebuild & start complete ($(( SECONDS - STEP_START ))s)"
+log "[8/9] Docker rebuild & start complete ($(( SECONDS - STEP_START ))s)"
 
-# Step 8: Set default model
+# Step 9: Set default model
 STEP_START=$SECONDS
-log "[8/8] Setting default model..."
+log "[9/9] Setting default model..."
 ssh "${SSH_OPTS[@]}" "$SSH_HOST" "cd ~/JONI && docker compose run --rm joni-cli models set openrouter/anthropic/claude-sonnet-4-5 || true"
-log "[8/8] Model set ($(( SECONDS - STEP_START ))s)"
+log "[9/9] Model set ($(( SECONDS - STEP_START ))s)"
 
 TOTAL_ELAPSED=$(( SECONDS - TOTAL_START ))
 log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
