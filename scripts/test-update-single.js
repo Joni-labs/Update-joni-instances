@@ -25,7 +25,6 @@ const {
 } = require("../configs/index");
 
 const Instance = require("../models/instances.model");
-const VersionConfig = require("../models/version-config.model");
 
 const PUBLIC_IP = process.argv[2];
 
@@ -110,13 +109,13 @@ function runShellUpdate() {
     console.log("");
 
     // Step 1: Connect to DB
-    log("Step 1/8: Connecting to MongoDB...");
+    log("Step 1/7: Connecting to MongoDB...");
     mongoose.set("strictQuery", false);
     await mongoose.connect(database.uri);
-    log("Step 1/8: Connected to MongoDB");
+    log("Step 1/7: Connected to MongoDB");
 
     // Step 2: Find instance by IP
-    log(`Step 2/8: Looking up instance with publicIP=${PUBLIC_IP}...`);
+    log(`Step 2/7: Looking up instance with publicIP=${PUBLIC_IP}...`);
     const instance = await Instance.findOne({ publicIP: PUBLIC_IP });
     if (!instance) {
       logErr(`No instance found with publicIP=${PUBLIC_IP}`);
@@ -124,28 +123,19 @@ function runShellUpdate() {
     }
     printInstance("BEFORE update", instance);
 
-    // Step 3: Set target version in DB
-    log("Step 3/8: Writing target version to version-configs collection...");
-    await VersionConfig.findOneAndUpdate(
-      { key: "target-version" },
-      { key: "target-version", value: UPDATE_VERSION },
-      { upsert: true }
-    );
-    log(`Step 3/8: target-version set to ${UPDATE_VERSION} in DB`);
-
     const originalStatus = instance.userId ? "occupied" : "free";
     log(`  Resolved status: "${originalStatus}" (userId: ${instance.userId ? 'yes' : 'none'})`);
 
-    // Step 4: Mark instance as updating
-    log("Step 4/8: Setting status='updating', updateStatus='updating' in DB...");
+    // Step 3: Mark instance as updating
+    log("Step 3/7: Setting status='updating', updateStatus='updating' in DB...");
     await Instance.findByIdAndUpdate(instance._id, {
       status: "updating",
       updateStatus: "updating",
     });
-    log("Step 4/8: Instance locked for update (invisible to user assignment)");
+    log("Step 3/7: Instance locked for update (invisible to user assignment)");
 
-    // Step 5: Run SSH update
-    log("Step 5/8: Running SSH update script...");
+    // Step 4: Run SSH update
+    log("Step 4/7: Running SSH update script...");
     console.log("");
     const startTime = Date.now();
 
@@ -169,25 +159,25 @@ function runShellUpdate() {
     }
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    log(`Step 5/8: SSH update completed in ${elapsed}s`);
+    log(`Step 4/7: SSH update completed in ${elapsed}s`);
 
-    // Step 6: Stamp version + branch in DB, restore original status
-    log(`Step 6/8: Setting status='${originalStatus}', version='${UPDATE_VERSION}', currentBranch='${UPDATE_BRANCH}' in DB...`);
+    // Step 5: Stamp version + branch in DB, restore original status
+    log(`Step 5/7: Setting status='${originalStatus}', version='${UPDATE_VERSION}', currentBranch='${UPDATE_BRANCH}' in DB...`);
     await Instance.findByIdAndUpdate(instance._id, {
       status: originalStatus,
       version: UPDATE_VERSION,
       currentBranch: UPDATE_BRANCH,
       updateStatus: "idle",
     });
-    log("Step 6/8: DB updated successfully");
+    log("Step 5/7: DB updated successfully");
 
-    // Step 7: Verify final state
-    log("Step 7/8: Verifying final DB state...");
+    // Step 6: Verify final state
+    log("Step 6/7: Verifying final DB state...");
     const after = await Instance.findById(instance._id);
     printInstance("AFTER update (SUCCESS)", after);
 
-    // Step 8: Summary
-    log("Step 8/8: Done!");
+    // Step 7: Summary
+    log("Step 7/7: Done!");
     log("═══════════════════════════════════════════════════");
     log(`  Instance ${after.name} (${PUBLIC_IP})`);
     log(`  version:       ${instance.version ?? "(none)"} -> ${after.version}`);
